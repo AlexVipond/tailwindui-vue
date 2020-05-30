@@ -85,12 +85,12 @@ Basic example:
 ```html
 <template>
   <div
-    ref="listboxRoot"
+    ref="listbox.root.ref"
     v-bind="{ ...listbox.root.bindings }"
     v-on="{ ...listbox.root.listeners }"
   >
     <span
-      ref="listboxLabel"
+      ref="listbox.label.ref"
       v-bind="{ ...listbox.label.bindings }"
     >
       Select a wrestler:
@@ -103,17 +103,17 @@ Basic example:
       {{ selectedWrestler }}
     </button>
     <ul
-      ref="listboxList"
+      ref="listbox.list.ref"
       v-show="listbox.list.isOpen"
       v-bind="{ ...listbox.list.bindings }"
       v-on="{ ...listbox.list.listeners }"
     >
       <li
-        v-for="({ value, bindings, listeners, isActive, isSelected }) in listbox.values"
+        v-for="({ value, bindings, listeners, isActive, isSelected }) in listbox.options"
         :key="value"
         v-bind="{ ...bindings }"
         v-on="{ ...listeners }"
-        ref="listboxOptions"
+        ref="listbox.options.ref"
       >
         <div 
           class="p-3" 
@@ -132,18 +132,8 @@ Basic example:
 
   export default {
     setup () {
-      const listboxRoot = ref(null),
-            listboxLabel = ref(null),
-            listboxButton = ref(null),
-            listboxList = ref(null),
-            listboxOptions = ref(null),
-            listbox = useListbox({
-              listboxRoot,
-              listboxLabel,
-              listboxButton,
-              listboxList,
-              listboxOptions,
-              values: [
+      const listbox = useListbox({
+              options: [
                 'The Ultimate Warrior',
                 'Randy Savage',
                 'Hulk Hogan',
@@ -154,15 +144,10 @@ Basic example:
                 'Bam Bam Bigelow',
                 'Yokozuna',
               ],
-              value: 'The Ultimate Warrior'
+              defaultOption: 'The Ultimate Warrior'
             })
     
       return {
-        listboxRoot,
-        listboxLabel,
-        listboxButton,
-        listboxList,
-        listboxOptions,
         listbox,
       }
     }      
@@ -178,3 +163,4 @@ Benefits of composition function approach:
   - Doesn't need to register option refs
 - The composition function is fully renderless. This leaves the end user free to define their own SFC template, which [Vue can optimize more easily than a plain render function](https://www.fullstackradio.com/episodes/129?t=19m0s).
 - User does not need to know how to use slots or scoped slots
+- Internal code is collocated based on its purpose, rather than split across several different components

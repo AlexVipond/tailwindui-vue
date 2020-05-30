@@ -27,7 +27,7 @@ export default {
     const children = defaultSlot(getCurrentInstance(), {})
     const values = children.map((node) => node.componentOptions.propsData.value)
     context.value.values = values
-    // const focusedIndex = values.indexOf(this.context.value.activeItem)
+    const focusedIndex = values.indexOf(this.context.value.activeItem)
 
     /* Event handlers */
     const handleFocusout = e => {
