@@ -16,6 +16,28 @@ function isString(value) {
   return typeof value === 'string' || value instanceof String
 }
 
+export const ListboxLabel = {
+  inject: {
+    context: ListboxSymbol,
+  },
+  data: () => ({
+    id: generateId(),
+  }),
+  mounted() {
+    this.context.labelId.value = this.id
+  },
+  render(h) {
+    return h(
+      'span',
+      {
+        attrs: {
+          id: this.id,
+        },
+      },
+      defaultSlot(this, {})
+    )
+  },
+}
 
 export const ListboxButton = {
   inject: {
@@ -204,3 +226,126 @@ export const ListboxOption = {
   },
 }
 
+export const Listbox = {
+  props: ['value'],
+  data: (vm) => ({
+    typeahead: { value: '' },
+    listboxButtonRef: { value: null },
+    listboxListRef: { value: null },
+    isOpen: { value: false },
+    activeItem: { value: vm.$props.value },
+    values: { value: null },
+    labelId: { value: null },
+    buttonId: { value: null },
+    optionIds: { value: [] },
+    optionRefs: { value: [] },
+  }),
+  provide() {
+    return {
+      [ListboxSymbol]: {
+        getActiveDescendant: this.getActiveDescendant,
+        registerOptionId: this.registerOptionId,
+        unregisterOptionId: this.unregisterOptionId,
+        registerOptionRef: this.registerOptionRef,
+        unregisterOptionRef: this.unregisterOptionRef,
+        toggle: this.toggle,
+        open: this.open,
+        close: this.close,
+        select: this.select,
+        focus: this.focus,
+        clearTypeahead: this.clearTypeahead,
+        typeahead: this.$data.typeahead,
+        type: this.type,
+        listboxButtonRef: this.$data.listboxButtonRef,
+        listboxListRef: this.$data.listboxListRef,
+        isOpen: this.$data.isOpen,
+        activeItem: this.$data.activeItem,
+        values: this.$data.values,
+        labelId: this.$data.labelId,
+        buttonId: this.$data.buttonId,
+        props: this.$props,
+      },
+    }
+  },
+  methods: {
+    getActiveDescendant() {
+      const [_value, id] = this.optionIds.value.find(([value]) => {
+        return value === this.activeItem.value
+      }) || [null, null]
+
+      return id
+    },
+    registerOptionId(value, optionId) {
+      this.unregisterOptionId(value)
+      this.optionIds.value = [...this.optionIds.value, [value, optionId]]
+    },
+    unregisterOptionId(value) {
+      this.optionIds.value = this.optionIds.value.filter(([candidateValue]) => {
+        return candidateValue !== value
+      })
+    },
+    type(value) {
+      this.typeahead.value = this.typeahead.value + value
+
+      const [match] = this.optionRefs.value.find(([_value, ref]) => {
+        return ref.innerText.toLowerCase().startsWith(this.typeahead.value.toLowerCase())
+      }) || [null]
+
+      if (match !== null) {
+        this.focus(match)
+      }
+
+      this.clearTypeahead()
+    },
+    clearTypeahead: debounce(function () {
+      this.typeahead.value = ''
+    }, 500),
+    registerOptionRef(value, optionRef) {
+      this.unregisterOptionRef(value)
+      this.optionRefs.value = [...this.optionRefs.value, [value, optionRef]]
+    },
+    unregisterOptionRef(value) {
+      this.optionRefs.value = this.optionRefs.value.filter(([candidateValue]) => {
+        return candidateValue !== value
+      })
+    },
+    toggle() {
+      this.$data.isOpen.value ? this.close() : this.open()
+    },
+    open() {
+      this.$data.isOpen.value = true
+      this.focus(this.$props.value)
+      this.$nextTick(() => {
+        this.$data.listboxListRef.value().focus()
+      })
+    },
+    close() {
+      this.$data.isOpen.value = false
+      this.$data.listboxButtonRef.value().focus()
+    },
+    select(value) {
+      this.$emit('input', value)
+      this.$nextTick(() => {
+        this.close()
+      })
+    },
+    focus(value) {
+      this.activeItem.value = value
+
+      if (value === null) {
+        return
+      }
+
+      this.$nextTick(() => {
+        this.listboxListRef
+          .value()
+          .children[this.values.value.indexOf(this.activeItem.value)].scrollIntoView({
+            block: 'nearest',
+          })
+      })
+    },
+  },
+  render(h) {
+    return h('div', {}, defaultSlot(this, { isOpen: this.$data.isOpen.value }))
+  },
+}

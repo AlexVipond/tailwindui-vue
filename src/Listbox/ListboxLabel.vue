@@ -15,7 +15,7 @@ export default {
           context = inject(ListboxSymbol)
 
     onMounted(() => {
-      context.labelId.value = id.value
+      context.value.setLabelId(id.value)
     })
 
     return {
