@@ -78,10 +78,10 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
           'aria-expanded': computed(() => isOpen.value),
         },
         buttonListeners = {
-          focus: () => {
+          onFocus: () => {
             isFocused.value = true
           },
-          blur: () => {
+          onBlur: () => {
             isFocused.value = false
           },
           click: toggle,
@@ -112,16 +112,16 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
           'aria-labelledby': '', // TODO: expose as a prop? Should be a human-readable label, according to the spec: https://www.w3.org/TR/wai-aria/#aria-label
         },
         listListeners = {
-          focusout: e => {
+          onFocusout: e => {
             if (e.relatedTarget === button.value) {
               return
             }
             close()
           },
-          mouseleave: () => {
+          onMouseleave: () => {
             activeOption.value = null
           },
-          keydown: e => {
+          onKeydown: e => {
             let indexToFocus
             switch (e.key) {
               case 'Esc':
@@ -174,26 +174,30 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
         options = rawOptions.map((option, index) => {
           const id = getOptionId(option),
                 isActive = computed(() =>  id === activeOption.value),
-                isSelected = computed(() => id === selectedOption.value)
+                isSelected = computed(() => id === selectedOption.value),
+                bindings = {
+                  role: 'option',
+                  'aria-selected': computed(() => isSelected.value),
+                },
+                listeners = {
+                  onClick: () => {
+                    select(id)
+                  },
+                  onMousemove: () => {
+                    if (activeOption.value === id) {
+                      return
+                    }
+        
+                    activeOption.value = id
+                  },
+                }
 
           return {
             ref: computed(() => optionsRef.value[index]),
             value: option,
             bindings: {
-              role: 'option',
-              'aria-selected': computed(() => isSelected.value),
-            },
-            listeners: {
-              click: () => {
-                select(id)
-              },
-              mousemove: () => {
-                if (activeOption.value === id) {
-                  return
-                }
-    
-                activeOption.value = id
-              },
+              ...bindings,
+              ...listeners,
             },
             isActive,
             isSelected,
@@ -203,25 +207,33 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
   return {
     root: {
       ref: rootRef,
-      bindings: rootBindings,
-      listeners: rootListeners,
+      bindings:  {
+        ...rootBindings,
+        ...rootListeners,
+      },
     },
     label: {
       ref: labelRef,
-      bindings: labelBindings,
-      listeners: labelListeners,
+      bindings:  {
+        ...labelBindings,
+        ...labelListeners,
+      },
     },
     button: {
       isFocused,
       ref: buttonRef,
-      bindings: buttonBindings,
-      listeners: buttonListeners,
+      bindings:  {
+        ...buttonBindings,
+        ...buttonListeners,
+      },
     },
     list: {
       isOpen,
       ref: listRef,
-      bindings: listBindings,
-      listeners: listListeners,
+      bindings:  {
+        ...listBindings,
+        ...listListeners,
+      },
     },
     options: {
       ref: optionsRef,

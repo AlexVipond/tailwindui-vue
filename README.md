@@ -85,35 +85,32 @@ Basic example:
 ```html
 <template>
   <div
-    ref="listbox.root.ref"
+    ref="listboxRoot"
     v-bind="{ ...listbox.root.bindings }"
-    v-on="{ ...listbox.root.listeners }"
   >
     <span
-      ref="listbox.label.ref"
+      ref="listboxLabel"
       v-bind="{ ...listbox.label.bindings }"
     >
       Select a wrestler:
     </span>
     <button
+      ref="listboxButton"
       class="rounded p-3 border"
       v-bind="{ ...listbox.button.bindings }"
-      v-on="{ ...listbox.button.listeners }"
     >
-      {{ selectedWrestler }}
+      {{ listbox.selectedOption }}
     </button>
     <ul
-      ref="listbox.list.ref"
+      ref="listboxList"
       v-show="listbox.list.isOpen"
       v-bind="{ ...listbox.list.bindings }"
-      v-on="{ ...listbox.list.listeners }"
     >
       <li
-        v-for="({ value, bindings, listeners, isActive, isSelected }) in listbox.options"
+        v-for="({ value, bindings, isActive, isSelected }) in listbox.options.values"
         :key="value"
         v-bind="{ ...bindings }"
-        v-on="{ ...listeners }"
-        ref="listbox.options.ref"
+        ref="listboxOptions"
       >
         <div 
           class="p-3" 
@@ -149,6 +146,11 @@ Basic example:
     
       return {
         listbox,
+        listboxRoot: listbox.root.ref,
+        listboxLabel: listbox.label.ref,
+        listboxList: listbox.list.ref,
+        listboxOptions: listbox.options.ref,
+        listboxButton: listbox.button.ref,
       }
     }      
   }
