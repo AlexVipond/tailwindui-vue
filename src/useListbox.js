@@ -2,14 +2,21 @@ import { ref, computed, getCurrentInstance } from 'vue'
 import debounce from 'debounce'
 
 export default function useListbox ({ options: rawOptions, getOptionId = option => option, defaultOption }) {
-  const selectedOption = ref(defaultOption || getOptionId(rawOptions[0]))
+  const selectedOption = ref((defaultOption && getOptionId(defaultOption)) || getOptionId(rawOptions[0]))
+
+  const rootRef = ref(null),
+        rootBindings = {},
+        rootListeners = {},
+        labelRef = ref(null),
+        labelBindings = {},
+        labelListeners = {}
 
   /* Manage typeahead and focusing the first matching option */
   const typeahead = ref(''),
         type = value => {
           typeahead.value = typeahead.value + value
 
-          const match = options.value.find(({ ref: optionRef }) => {
+          const match = options.find(({ ref: optionRef }) => {
             return optionRef.innerText.toLowerCase().startsWith(typeahead.value.toLowerCase())
           }) || null
 
@@ -22,7 +29,6 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
         clearTypeahead = debounce(() => {
           typeahead.value = ''
         }, 500)
-
 
   /* Manage list open state */
   const isOpen = ref(false),
@@ -51,6 +57,8 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
             return
           }
 
+          console.log(listRef.value)
+
           nextTick(() => {
             listRef
               .value
@@ -61,7 +69,8 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
         }
 
   /* Manage button focused state */
-  const isFocused = ref(false),
+  const buttonRef = ref(null),
+        isFocused = ref(false),
         buttonBindings = {
           type: 'button',
           'aria-haspopup': 'listbox',
@@ -90,11 +99,11 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
         }
 
   /* List */
-  const focusedIndex = computed(() => options.indeOptions( getOptionId = option => optionactiveOption.value)),
+  const focusedIndex = computed(() => options.findIndex(option => getOptionId(option) === activeOption.value)),
         getActiveDescendant = () => {
-          const option = options.value.find(option => getOptionId(option) === activeOption.value) || null
+          const option = options.find(option => getOptionId(option) === activeOption.value) || null
           return !!option ? getOptionId(option) : null
-        }
+        },
         listBindings = {
           ref: listRef,
           tabindex: '-1',
@@ -103,16 +112,16 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
           'aria-labelledby': '', // TODO: expose as a prop? Should be a human-readable label, according to the spec: https://www.w3.org/TR/wai-aria/#aria-label
         },
         listListeners = {
-          focusout = e => {
+          focusout: e => {
             if (e.relatedTarget === button.value) {
               return
             }
             close()
           },
-          mouseleave = () => {
+          mouseleave: () => {
             activeOption.value = null
           },
-          keydown = e => {
+          keydown: e => {
             let indexToFocus
             switch (e.key) {
               case 'Esc':
@@ -216,10 +225,9 @@ export default function useListbox ({ options: rawOptions, getOptionId = option 
     },
     options: {
       ref: optionsRef,
-      bindings: optionsBindings,
-      listeners: optionsListeners,
+      values: options,
     },
-   Options, getOptionId = option => option
+    selectedOption,
   }
 }
 
