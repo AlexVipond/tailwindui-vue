@@ -1,8 +1,9 @@
 import { ref, computed, nextTick } from 'vue'
+import { onMounted, watchEffect } from 'vue'
 import debounce from 'debounce'
 import {
-  useBinding, // Used for binding static and reactive data to DOM references
-  useListener // Used for adding event listeners, and cleaning them up when the component is unmounted
+  useBindings, // Used for binding static and reactive data to DOM references
+  useListeners // Used for adding event listeners, and cleaning them up when the component is unmounted
 } from '@baleada/vue-features/util'
 
 export default function useListbox ({ options: rawOptions, defaultOption }) {
@@ -11,38 +12,40 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
    * This array contains the core option objects that we'll be
    * interacting with in the rest of the function.
    */
-  const optionsEls = ref(null), // When attached to the element with v-for, this becomes an array of DOM element references
+  const optionsEls = ref([]), // When attached to the element with v-for, this becomes an array of DOM element references
         options = rawOptions.map((option, index) => {
           const value = option,
-                isActive = computed(() => value === focusedValue.value),
-                isSelected = computed(() => value === selectedValue.value),
-                el = computed(() => optionsEls.value[index])
-          
-          // Statically bind the role
-          useBinding({ target: el, attribute: 'role', value: 'option' })
+                isActive = computed(() => value === active.value),
+                isSelected = computed(() => value === selected.value),
+                el = computed(() => optionsEls.value[index]),
+                id = generateId()
 
-          // Reactively bind the selected state
-          useBinding({ target: el, attribute: 'aria-selected', value: isSelected })
-          
-          // Handle click
-          useListener({
+          useBindings({
             target: el,
-            eventType: 'click',
-            callback () {
-              select(value)
-            }
+            bindings: {
+              // Statically bind the role and id
+              role: 'option',
+              id,
+              
+              // Reactively bind the selected state
+              'aria-selected': computed(() => isSelected.value ? true : '')
+            },
           })
-
-          // Handle mousemove
-          useListener({
+          
+          // Handle click and mousemove
+          useListeners({
             target: el,
-            eventType: 'mousemove',
-            callback () {
-              if (focusedValue.value === value) {
-                return
+            listeners: {
+              click () {
+                select(value)
+              },
+              mousemove () {
+                if (active.value === value) {
+                  return
+                }
+  
+                activate(value)
               }
-
-              focus(value)
             }
           })
 
@@ -51,32 +54,31 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
             value,
             isActive,
             isSelected,
+            id,
           }
         })
 
   /* Store the value of the selected option */
-  const selectedValue = ref(defaultOption || rawOptions[0])
+  const selected = ref(defaultOption || rawOptions[0]),
         select = newValue => {
-          selectedValue.value = newValue
+          selected.value = newValue
 
           /* EFFECT: Close the list */
           nextTick(() => close())
         }
 
-  /* Store the value of the active/focused option */
-  const focusedValue = ref(null),
-        focus = newValue => {
-          focusedValue.value = newValue
+  /* Manage option active status */
+  const active = ref(null),
+        activeIndex = computed(() => options.findIndex(({ value }) => value === active.value)),
+        activate = newValue => {
+          active.value = newValue
 
-          /* EFFECT: Scroll list to the focused option */
-          if (focusedValue.value === null) {
+          /* EFFECT: Scroll list to the active option */
+          if (active.value === null) {
             return
           }
     
-          nextTick(() => {
-            const focusedOptionIndex = options.findIndex(({ value }) => value === focusedOption.value)
-            list.el.value.children[focusedOptionIndex].scrollIntoView({ block: 'nearest' })
-          })
+          nextTick(() => listEl.value.children[activeIndex.value].scrollIntoView({ block: 'nearest' }))
         }
 
   /* Store typeahead */
@@ -86,190 +88,176 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
           clearTypeahead()
 
           /* EFFECT: Focus the first option that matches the typeahead */
-          const match = options.find(({ ref: optionEl }) => {
-            return optionEl.value.innerText.toLowerCase().startsWith(typeahead.value.toLowerCase())
+          const match = options.find(({ el }) => {
+            return el.value.innerText.toLowerCase().startsWith(typeahead.value.toLowerCase())
           }) || { value: null }
     
-          focus(getOptionValue(match))
+          activate(match.value)
         },
         clearTypeahead = debounce(() => {
           typeahead.value = ''
         }, 500)
 
   /* Manage list open state */
-  const list = {
-          el: ref(null),
-          isOpen = ref(false),
-        },
+  const listIsOpen = ref(false),
         toggle = () => {
-          list.isOpen.value ? close() : open()
+          listIsOpen.value ? close() : open()
         },
         open = () => {
-          list.isOpen.value = true
-          focus(selectedValue.value)
+          listIsOpen.value = true
+          activate(selected.value)
 
           /* EFFECT: Focus the list of options */
           nextTick(() => {
-            list.el.value.focus()
+            listEl.value.focus()
           })
         },
         close = () => {
-          list.isOpen.value = false
+          listIsOpen.value = false
 
           /* EFFECT: Focus the button */
-          button.el.value.focus()
+          buttonEl.value.focus()
         }
 
+  /* Set up label ref */
+  const labelEl = ref(null),
+        labelId = generateId()
   
-  watch(
-    () => selectedValue,
-    () => 
-  )
+  // Statically bind label ID
+  useBindings({ target: labelEl, bindings: { id: labelId } })
 
-
-
-
+  /* Set up button */
+  const buttonEl = ref(null)
   
-  /* Manage button focused state */
-  const button = {
-          el: ref(null),
-          isFocused: ref(false),
-        },
-        buttonAttrs = [
-          { attribute: type, value: 'button' }
-          { attribute: 'aria-haspopup', value: 'listbox' }
-          { attribute: 'aria-labelledby', value: '' }
-          { attribute: 'aria-expanded', value: isOpen }
-        ]
-  
-  useBinding({  })
+  useBindings({
+    target: buttonEl,
+    bindings: {
+      // Statically bind some button attrs
+      type: 'button',
+      'aria-haspopup': 'listbox',
+      'aria-labelledby': labelId,
+      
+      // Reactively bind list open state.
+      'aria-expanded': listIsOpen,
+    }
+  })
 
-        buttonBindings = {
-          
-        },
-        buttonListeners = {
-          onFocus: () => {
-            isFocused.value = true
-          },
-          onBlur: () => {
-            isFocused.value = false
-          },
-          click: toggle,
+  // Handle button focus, blur, and click
+  const buttonIsFocused = ref(false)
+  useListeners({
+    target: buttonEl,
+    listeners: {
+      focus () {
+        buttonIsFocused.value = true
+      },
+      blur () {
+        buttonIsFocused.value = false
+      },
+      click: toggle,
+    }
+  })
+
+
+  /* Set up list */
+  const listEl = ref(null)
+
+  useBindings({
+    target: listEl,
+    bindings: {
+      tabindex: '-1',
+      role: 'listbox',
+      'aria-activedescendant': computed(() => options.find(({ value }) => value === active.value)?.id || null),
+      'aria-labelledby': '',
+    }
+  })
+
+  useListeners({
+    target: listEl,
+    listeners: {
+      focusout (e) {
+        if (e.relatedTarget === buttonEl.value) {
+          return
         }
 
-
-  /* List */
-  const focusedIndex = computed(() => options.findIndex(option => getOptionValue(option) === focusedValue.value)),
-        getActiveDescendant = () => {
-          const option = options.find(option => getOptionValue(option) === focusedValue.value) || null
-          return !!option ? getOptionValue(option) : null
-        },
-        listBindings = {
-          ref: list.el,
-          tabindex: '-1',
-          role: 'listbox',
-          'aria-activedescendant': computed(() => getActiveDescendant()),
-          'aria-labelledby': '',
-        },
-        listListeners = {
-          onFocusout: e => {
-            if (e.relatedTarget === button.value) {
+        close()
+      },
+      mouseleave () {
+        active.value = null
+      },
+      keydown (e) {
+        let indexToFocus
+        switch (e.key) {
+          case 'Esc':
+          case 'Escape':
+            e.preventDefault()
+            close()
+            break
+          case 'Tab':
+            e.preventDefault()
+            break
+          case 'Up':
+          case 'ArrowUp':
+            e.preventDefault()
+            indexToFocus = activeIndex.value - 1 < 0 ? options.length - 1 : activeIndex.value - 1
+            activate(options[indexToFocus].value)
+            break
+          case 'Down':
+          case 'ArrowDown':
+            e.preventDefault()
+            indexToFocus = activeIndex.value + 1 > options.length - 1 ? 0 : activeIndex.value + 1
+            activate(options[indexToFocus].value)
+            break
+          case 'Spacebar':
+          case ' ':
+            e.preventDefault()
+            if (typeahead.value !== '') {
+              type(' ')
+            } else {
+              select(active.value)
+            }
+            break
+          case 'Enter':
+            e.preventDefault()
+            select(active.value)
+            break
+          default:
+            if (!(isString(e.key) && e.key.length === 1)) {
               return
             }
-            close()
-          },
-          onMouseleave: () => {
-            focusedValue.value = null
-          },
-          onKeydown: e => {
-            let indexToFocus
-            switch (e.key) {
-              case 'Esc':
-              case 'Escape':
-                e.preventDefault()
-                close()
-                break
-              case 'Tab':
-                e.preventDefault()
-                break
-              case 'Up':
-              case 'ArrowUp':
-                e.preventDefault()
-                indexToFocus = focusedIndex.value - 1 < 0 ? options.length - 1 : focusedIndex.value - 1
-                focus(getOptionValue(options[indexToFocus]))
-                break
-              case 'Down':
-              case 'ArrowDown':
-                e.preventDefault()
-                indexToFocus = focusedIndex.value + 1 > options.length - 1 ? 0 : focusedIndex.value + 1
-                focus(getOptionValue(options[indexToFocus]))
-                break
-              case 'Spacebar':
-              case ' ':
-                e.preventDefault()
-                if (typeahead.value !== '') {
-                  type(' ')
-                } else {
-                  select(focusedValue.value)
-                }
-                break
-              case 'Enter':
-                e.preventDefault()
-                select(focusedValue.value)
-                break
-              default:
-                if (!(isString(e.key) && e.key.length === 1)) {
-                  return
-                }
 
-                e.preventDefault()
-                this.context.type(e.key)
-                return
-            }
-          }
+            e.preventDefault()
+            type(e.key)
+            return
         }
-
-
-  const rootRef = ref(null),
-        labelRef = ref(null)
-  
+      }
+    }
+  })
 
   return {
-    root: {
-      ref: rootRef,
-      bindings:  {
-        ...rootBindings,
-        ...rootListeners,
-      },
-    },
     label: {
-      ref: labelRef,
-      bindings:  {
-        ...labelBindings,
-        ...labelListeners,
+      ref (el) {
+        labelEl.value = el
       },
     },
     button: {
-      isFocused,
-      ref: buttonRef,
-      bindings:  {
-        ...buttonBindings,
-        ...buttonListeners,
+      ref (el) {
+        buttonEl.value = el
       },
+      isFocused: buttonIsFocused
     },
     list: {
-      isOpen,
-      ref: list.el,
-      bindings:  {
-        ...listBindings,
-        ...listListeners,
+      ref (el) {
+        listEl.value = el
       },
+      isOpen: listIsOpen
     },
     options: {
-      ref: optionsEls,
       values: options,
+      ref (el) {
+        optionsEls.value = [...optionsEls.value, el]
+      },
     },
-    selectedValue,
+    selected,
   }
 }
 
@@ -278,6 +266,8 @@ function isString(value) {
 }
 
 let id = 0
-function generateId() {
-  return `tailwind-ui-listbox-id-${++id}`
+// If there's ever a strong use case for customizing the id prefix,
+// it could be exposed as an optional param for the composition function.
+function generateId(idPrefix = 'tailwind-ui-listbox-id-') {
+  return `${idPrefix}${++id}`
 }
