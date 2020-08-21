@@ -1,5 +1,4 @@
-import { ref, computed, nextTick } from 'vue'
-import { onMounted, watchEffect } from 'vue'
+import { ref, reactive, computed, nextTick } from 'vue'
 import debounce from 'debounce'
 import {
   useBindings, // Used for binding static and reactive data to DOM references
@@ -12,7 +11,7 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
    * This array contains the core option objects that we'll be
    * interacting with in the rest of the function.
    */
-  const optionsEls = ref([]), // When attached to the element with v-for, this becomes an array of DOM element references
+  const optionsEls = ref([]), // When attached to the element with v-for, this becomes an array of DOM elements
         options = rawOptions.map((option, index) => {
           const value = option,
                 isActive = computed(() => value === active.value),
@@ -58,7 +57,7 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
           }
         })
 
-  /* Store the value of the selected option */
+  /* Manage the value of the selected option */
   const selected = ref(defaultOption || rawOptions[0]),
         select = newValue => {
           selected.value = newValue
@@ -81,7 +80,7 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
           nextTick(() => listEl.value.children[activeIndex.value].scrollIntoView({ block: 'nearest' }))
         }
 
-  /* Store typeahead */
+  /* Manage typeahead */
   const typeahead = ref(''),
         type = value => {
           typeahead.value = typeahead.value + value
@@ -233,32 +232,37 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
     }
   })
 
-  return {
+  // `reactive` is used on the return value so that the user can destructure
+  // without losing reactivity, and so that all `ref`s get unwrapped.
+  //
+  // https://v3.vuejs.org/guide/reactivity-fundamentals.html#access-in-reactive-objects
+  // https://v3.vuejs.org/guide/reactivity-fundamentals.html#destructuring-reactive-state
+  return reactive({
     label: {
-      ref (el) {
-        labelEl.value = el
-      },
+      ref: el => (labelEl.value = el),
     },
     button: {
-      ref (el) {
-        buttonEl.value = el
-      },
+      ref: el => (buttonEl.value = el),
       isFocused: buttonIsFocused
     },
     list: {
-      ref (el) {
-        listEl.value = el
-      },
+      ref: el => (listEl.value = el),
       isOpen: listIsOpen
     },
     options: {
       values: options,
-      ref (el) {
-        optionsEls.value = [...optionsEls.value, el]
-      },
+      // Since the options ref gets bound to a v-for, it's required to be a function ref
+      // with a little extra logic inside.
+      // 
+      // https://v3.vuejs.org/guide/composition-api-template-refs.html#usage-inside-v-for
+      //
+      // To keep the developer experience consistent, all other element refs are exposed
+      // as functions, too. That way, developers consistently bind every element ref,
+      // instead of passing strings to some elements and binding refs to others.
+      ref: (el) => (optionsEls.value = [...optionsEls.value, el]),
     },
     selected,
-  }
+  })
 }
 
 function isString(value) {
