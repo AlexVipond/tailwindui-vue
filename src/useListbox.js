@@ -6,58 +6,63 @@ import {
 } from '@baleada/vue-features/util'
 
 export default function useListbox ({ options: rawOptions, defaultOption }) {
-  /* 
-   * First, we build an array of options.
-   * This array contains the core option objects that we'll be
+  /* Set up DOM refs, including static attribute binding */
+  const labelEl = ref(null),
+        buttonEl = ref(null),
+        listEl = ref(null),
+        labelId = generateId()
+  
+  // labelId static bindings
+  useBindings({ target: labelEl, bindings: { id: labelId } })
+  useBindings({ target: buttonEl, bindings: { 'aria-labelledby': labelId } })
+  useBindings({ target: listEl, bindings: { 'aria-labelledby': labelId } })
+
+  useBindings({
+    target: buttonEl,
+    bindings: {
+      type: 'button',
+      'aria-haspopup': 'listbox',
+    }
+  })
+
+  useBindings({
+    target: listEl,
+    bindings: { tabindex: '-1', role: 'listbox' }
+  })
+
+  useListeners({
+    target: listEl,
+    listeners: {
+      keydown: e => {
+        if (e.key === 'Tab') {
+          e.preventDefault()
+        }
+      }
+    }
+  })
+
+  /*
+   * Set up array of options objects that we'll be
    * interacting with in the rest of the function.
    */
-  const optionsEls = ref([]), // When attached to the element with v-for, this becomes an array of DOM elements
+  const optionsEls = ref([]), // When attached to the element with v-for, this will become an array of DOM elements
         options = rawOptions.map((option, index) => {
           const value = option,
                 isActive = computed(() => value === active.value),
                 isSelected = computed(() => value === selected.value),
                 el = computed(() => optionsEls.value[index]),
-                id = generateId()
+                id = generateId(),
+                ariaSelected = computed(() => isSelected.value ? true : '')
 
           useBindings({
             target: el,
-            bindings: {
-              // Statically bind the role and id
-              role: 'option',
-              id,
-              
-              // Reactively bind the selected state
-              'aria-selected': computed(() => isSelected.value ? true : '')
-            },
-          })
-          
-          // Handle click and mousemove
-          useListeners({
-            target: el,
-            listeners: {
-              click () {
-                select(value)
-              },
-              mousemove () {
-                if (active.value === value) {
-                  return
-                }
-  
-                activate(value)
-              }
-            }
+            bindings: { role: 'option', id, 'aria-selected': ariaSelected }
           })
 
-          return {
-            el,
-            value,
-            isActive,
-            isSelected,
-            id,
-          }
+          return { el, value, isActive, isSelected, id }
         })
 
-  /* Manage the value of the selected option */
+  /* Manage selected option */
   const selected = ref(defaultOption || rawOptions[0]),
         select = newValue => {
           selected.value = newValue
@@ -65,8 +70,38 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
           /* EFFECT: Close the list */
           nextTick(() => close())
         }
+  
+  options.forEach(({ el, value }) => {
+    useListeners({
+      target: el,
+      listeners: { click: () => select(value) }
+    })
+  })
 
-  /* Manage option active status */
+  useListeners({
+    target: listEl,
+    listeners: {
+      keydown (e) {
+        switch (e.key) {
+          case 'Spacebar':
+          case ' ':
+            e.preventDefault()
+            if (typeahead.value !== '') {
+              type(' ')
+            } else {
+              select(active.value)
+            }
+            break
+          case 'Enter':
+            e.preventDefault()
+            select(active.value)
+            break
+        }
+      }
+    }
+  })
+
+  /* Manage active option */
   const active = ref(null),
         activeIndex = computed(() => options.findIndex(({ value }) => value === active.value)),
         activate = newValue => {
@@ -78,7 +113,52 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
           }
     
           nextTick(() => listEl.value.children[activeIndex.value].scrollIntoView({ block: 'nearest' }))
+        },
+        ariaActiveDescendant = computed(() => options.find(({ value }) => value === active.value)?.id || null)
+
+  useBindings({
+    target: listEl,
+    bindings: { 'aria-activedescendant': ariaActiveDescendant }
+  })
+
+  options.forEach(({ el, value }) => {
+    useListeners({
+      target: el,
+      listeners: {
+        mousemove () {
+          if (active.value === value) {
+            return
+          }
+
+          activate(value)
         }
+      }
+    })
+  })
+  
+  useListeners({
+    target: listEl,
+    listeners: {
+      mouseleave: ()  => (active.value = null),
+      keydown: e => {
+        let indexToFocus
+        switch (e.key) {
+          case 'Up':
+          case 'ArrowUp':
+            e.preventDefault()
+            indexToFocus = activeIndex.value - 1 < 0 ? options.length - 1 : activeIndex.value - 1
+            activate(options[indexToFocus].value)
+            break
+          case 'Down':
+          case 'ArrowDown':
+            e.preventDefault()
+            indexToFocus = activeIndex.value + 1 > options.length - 1 ? 0 : activeIndex.value + 1
+            activate(options[indexToFocus].value)
+            break
+        }
+      }
+    }
+  })
 
   /* Manage typeahead */
   const typeahead = ref(''),
@@ -96,6 +176,20 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
         clearTypeahead = debounce(() => {
           typeahead.value = ''
         }, 500)
+
+  useListeners({
+    target: listEl,
+    listeners: {
+      keydown: e => {
+        if (!(isString(e.key) && e.key.length === 1)) {
+          return
+        }
+
+        e.preventDefault()
+        type(e.key)
+      }
+    }
+  })
 
   /* Manage list open state */
   const listIsOpen = ref(false),
@@ -118,56 +212,14 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
           buttonEl.value.focus()
         }
 
-  /* Set up label ref */
-  const labelEl = ref(null),
-        labelId = generateId()
-  
-  // Statically bind label ID
-  useBindings({ target: labelEl, bindings: { id: labelId } })
-
-  /* Set up button */
-  const buttonEl = ref(null)
-  
   useBindings({
     target: buttonEl,
-    bindings: {
-      // Statically bind some button attrs
-      type: 'button',
-      'aria-haspopup': 'listbox',
-      'aria-labelledby': labelId,
-      
-      // Reactively bind list open state.
-      'aria-expanded': listIsOpen,
-    }
+    bindings: { 'aria-expanded': listIsOpen },
   })
 
-  // Handle button focus, blur, and click
-  const buttonIsFocused = ref(false)
   useListeners({
     target: buttonEl,
-    listeners: {
-      focus () {
-        buttonIsFocused.value = true
-      },
-      blur () {
-        buttonIsFocused.value = false
-      },
-      click: toggle,
-    }
-  })
-
-
-  /* Set up list */
-  const listEl = ref(null)
-
-  useBindings({
-    target: listEl,
-    bindings: {
-      tabindex: '-1',
-      role: 'listbox',
-      'aria-activedescendant': computed(() => options.find(({ value }) => value === active.value)?.id || null),
-      'aria-labelledby': '',
-    }
+    listeners: { click: toggle }
   })
 
   useListeners({
@@ -180,55 +232,26 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
 
         close()
       },
-      mouseleave () {
-        active.value = null
-      },
       keydown (e) {
-        let indexToFocus
         switch (e.key) {
           case 'Esc':
           case 'Escape':
             e.preventDefault()
             close()
             break
-          case 'Tab':
-            e.preventDefault()
-            break
-          case 'Up':
-          case 'ArrowUp':
-            e.preventDefault()
-            indexToFocus = activeIndex.value - 1 < 0 ? options.length - 1 : activeIndex.value - 1
-            activate(options[indexToFocus].value)
-            break
-          case 'Down':
-          case 'ArrowDown':
-            e.preventDefault()
-            indexToFocus = activeIndex.value + 1 > options.length - 1 ? 0 : activeIndex.value + 1
-            activate(options[indexToFocus].value)
-            break
-          case 'Spacebar':
-          case ' ':
-            e.preventDefault()
-            if (typeahead.value !== '') {
-              type(' ')
-            } else {
-              select(active.value)
-            }
-            break
-          case 'Enter':
-            e.preventDefault()
-            select(active.value)
-            break
-          default:
-            if (!(isString(e.key) && e.key.length === 1)) {
-              return
-            }
-
-            e.preventDefault()
-            type(e.key)
-            return
         }
       }
+    }
+  })
+
+  /* Manage button focus */
+  const buttonIsFocused = ref(false)
+
+  useListeners({
+    target: buttonEl,
+    listeners: {
+      focus: () => (buttonIsFocused.value = true),
+      blur: () => (buttonIsFocused.value = false),
     }
   })
 
