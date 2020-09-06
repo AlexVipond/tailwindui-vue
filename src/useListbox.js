@@ -125,7 +125,7 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
     useListeners({
       target: el,
       listeners: {
-        mousemove () {
+        mouseenter () {
           if (active.value === value) {
             return
           }
@@ -255,12 +255,18 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
     }
   })
 
+  // The return value is plain object, so if you try to access its reactive refs
+  // in a Vue template, you'll have to use [ref].value.
+  //
+  // For more ergonomic access, the user can call Vue's `reactive` method on this
+  // object to unwrap all refs without losing reactivity.
+  // 
   // `reactive` is used on the return value so that the user can destructure
   // without losing reactivity, and so that all `ref`s get unwrapped.
   //
   // https://v3.vuejs.org/guide/reactivity-fundamentals.html#access-in-reactive-objects
   // https://v3.vuejs.org/guide/reactivity-fundamentals.html#destructuring-reactive-state
-  return reactive({
+  return {
     label: {
       ref: el => (labelEl.value = el),
     },
@@ -285,7 +291,7 @@ export default function useListbox ({ options: rawOptions, defaultOption }) {
       ref: (el) => (optionsEls.value = [...optionsEls.value, el]),
     },
     selected,
-  })
+  }
 }
 
 function isString(value) {
